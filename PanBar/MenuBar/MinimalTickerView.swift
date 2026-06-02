@@ -14,6 +14,7 @@ final class MinimalTickerView: NSView {
     var scheme: TickerColorScheme = .east
     var privacyHidden: Bool = false
     var showsIcon: Bool = true
+    var preferredTotalWidth: CGFloat?
     var hovered: Bool = false
     var onContentChanged: (() -> Void)?
 
@@ -21,6 +22,9 @@ final class MinimalTickerView: NSView {
     private let valueFont = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .semibold)
 
     var totalWidth: CGFloat {
+        if let preferredTotalWidth {
+            return max(40, preferredTotalWidth)
+        }
         guard let _ = content else { return leadingTextX + 40 }
         return leadingTextX + max(56, renderedString().size().width) + 6
     }

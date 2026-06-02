@@ -14,6 +14,7 @@ final class CompactTickerView: NSView {
     var scheme: TickerColorScheme = .east
     var privacyHidden: Bool = false
     var showsIcon: Bool = true
+    var preferredTotalWidth: CGFloat?
     /// hover 状态(放着满足协议,固定模式实际用不到)
     var hovered: Bool = false
     var onContentChanged: (() -> Void)?
@@ -36,7 +37,10 @@ final class CompactTickerView: NSView {
     }
 
     var totalWidth: CGFloat {
-        leadingTextX + max(60, contentWidth) + 4
+        if let preferredTotalWidth {
+            return max(40, preferredTotalWidth)
+        }
+        return leadingTextX + max(60, contentWidth) + 4
     }
 
     private var leadingTextX: CGFloat {

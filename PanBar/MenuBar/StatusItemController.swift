@@ -69,6 +69,16 @@ final class StatusItemController {
             swapTickerView(to: prefs.displayMode)
         }
         tickerView.showsIcon = prefs.showAppIcon
+        switch prefs.displayMode {
+        case .scroll, .scrollNoCode:
+            tickerView.preferredTotalWidth = prefs.scrollAutoWidth ? nil : CGFloat(prefs.scrollMenuBarWidth)
+        case .carousel:
+            tickerView.preferredTotalWidth = prefs.carouselAutoWidth ? nil : CGFloat(prefs.carouselMenuBarWidth)
+        case .compact:
+            tickerView.preferredTotalWidth = prefs.compactAutoWidth ? nil : CGFloat(prefs.compactMenuBarWidth)
+        case .minimal:
+            tickerView.preferredTotalWidth = nil
+        }
         // 各模式独立配置
         if let scroll = tickerView as? TickerView {
             scroll.pixelsPerSecond = prefs.scrollSpeed.pixelsPerSecond
