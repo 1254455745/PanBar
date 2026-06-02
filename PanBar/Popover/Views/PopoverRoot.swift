@@ -228,8 +228,11 @@ struct PopoverRoot: View {
     }
 
     private var footerStatus: String {
-        if let err = refresher.lastError, !err.isEmpty {
+        if refresher.isOffline {
             return L("footer.offline", comment: "")
+        }
+        if let err = refresher.lastError, !err.isEmpty {
+            return L("footer.quoteFailed", comment: "")
         }
         // 还没拿到任何 fresh 数据,但有磁盘 seed 进来的旧数据
         if refresher.snapshotIsFromCache {
@@ -247,16 +250,18 @@ struct PopoverRoot: View {
 
     /// 文字统一用 .secondary 灰色保证两个模式下都清晰可读,状态用图标颜色区分:
     ///   - 离线:橙色 wifi.slash
+    ///   - 行情失败:橙色感叹号
     ///   - cached:橙色 clock(让用户知道在看的不是最新值,但不刺眼)
     ///   - 正常:灰色刷新箭头
     private var footerIcon: String {
-        if refresher.lastError != nil { return "wifi.slash" }
+        if refresher.isOffline { return "wifi.slash" }
+        if refresher.lastError != nil { return "exclamationmark.triangle" }
         if refresher.snapshotIsFromCache { return "clock.arrow.circlepath" }
         return "arrow.clockwise"
     }
 
     private var footerIconColor: Color {
-        if refresher.lastError != nil { return .orange }
+        if refresher.isOffline || refresher.lastError != nil { return .orange }
         if refresher.snapshotIsFromCache { return .orange }
         return .secondary
     }
