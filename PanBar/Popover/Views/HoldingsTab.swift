@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct HoldingsTab: View {
@@ -11,6 +12,38 @@ struct HoldingsTab: View {
     /// 把 snapshot.positions 按 holding.id 建索引,O(1) 查找。
     private var positionsByID: [UUID: HoldingPosition] {
         Dictionary(uniqueKeysWithValues: refresher.snapshot.positions.map { ($0.holding.id, $0) })
+    }
+
+    private var metricsLayout: HoldingMetricsLayout {
+        let spacing: CGFloat = 6
+        var allTimeWidth = textWidth(L("summary.allTime", comment: ""), size: 10, weight: .medium)
+        var trailingWidth: CGFloat = 96
+
+        for holding in vm.holdings {
+            let quote = refresher.quotes[holding.symbol] ?? positionsByID[holding.id]?.quote
+            let position = positionsByID[holding.id]
+            allTimeWidth = max(
+                allTimeWidth,
+                metricValueWidth(value: nativePnL(holding: holding, quote: quote), currency: holding.currency),
+                baseMetricWidth(value: position?.basePnL, currency: refresher.snapshot.baseCurrency)
+            )
+            trailingWidth = max(
+                trailingWidth,
+                estimatedQuoteWidth(holding: holding, quote: quote),
+                metricLineWidth(
+                    label: L("summary.today", comment: ""),
+                    value: nativeTodayPnL(holding: holding, quote: quote),
+                    currency: holding.currency
+                ),
+                baseMetricWidth(value: position?.baseTodayPnL, currency: refresher.snapshot.baseCurrency)
+            )
+        }
+
+        return HoldingMetricsLayout(
+            allTimeColumnWidth: max(58, ceil(allTimeWidth) + 2),
+            trailingColumnWidth: max(96, ceil(trailingWidth) + 2),
+            spacing: spacing
+        )
     }
 
     var body: some View {
@@ -30,6 +63,7 @@ struct HoldingsTab: View {
                                 density: appearance.density,
                                 scheme: prefs.colorScheme,
                                 baseCurrency: refresher.snapshot.baseCurrency,
+                                metricsLayout: metricsLayout,
                                 showEditButton: hoveredID == holding.id,
                                 onEdit: { openEdit(holding) }
                             )
@@ -117,6 +151,62 @@ struct HoldingsTab: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 40)
     }
+
+    private func nativePnL(holding: Holding, quote: Quote?) -> Decimal? {
+        guard let quote else { return nil }
+        return (quote.price - holding.costPrice) * holding.quantity
+    }
+
+    private func nativeTodayPnL(holding: Holding, quote: Quote?) -> Decimal? {
+        guard let quote else { return nil }
+        return (quote.price - quote.prevClose) * holding.quantity
+    }
+
+    private func estimatedQuoteWidth(holding: Holding, quote: Quote?) -> CGFloat {
+        guard let quote else {
+            return textWidth("—", size: 12, weight: .semibold)
+        }
+        let price = holding.currency.format(quote.price)
+        let pct = String(format: "%+.2f%%", quote.changePct * 100)
+        return textWidth(price, size: 12, weight: .semibold)
+            + 5
+            + textWidth(pct, size: 10, weight: .semibold)
+            + 10
+    }
+
+    private func metricLineWidth(label: String, value: Decimal?, currency: Currency) -> CGFloat {
+        textWidth(label, size: 10, weight: .medium)
+            + 3
+            + metricValueWidth(value: value, currency: currency)
+    }
+
+    private func metricValueWidth(value: Decimal?, currency: Currency) -> CGFloat {
+        textWidth(value.map { signedPnL($0, currency: currency) } ?? "—", size: 11, weight: .semibold)
+    }
+
+    private func baseMetricWidth(value: Decimal?, currency: Currency) -> CGFloat {
+        textWidth(value.map { "≈ " + signedPnL($0, currency: currency) } ?? "—", size: 11, weight: .semibold)
+    }
+
+    private func signedPnL(_ value: Decimal, currency: Currency) -> String {
+        let sign = value >= 0 ? "+" : "-"
+        return sign + currency.format(value.magnitude)
+    }
+
+    private func textWidth(_ text: String, size: CGFloat, weight: NSFont.Weight) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: size, weight: weight)
+        return ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+}
+
+private struct HoldingMetricsLayout {
+    let allTimeColumnWidth: CGFloat
+    let trailingColumnWidth: CGFloat
+    let spacing: CGFloat
+
+    var totalWidth: CGFloat {
+        allTimeColumnWidth + spacing + trailingColumnWidth
+    }
 }
 
 private struct HoldingRow: View {
@@ -128,6 +218,7 @@ private struct HoldingRow: View {
     let density: PopoverDensity
     let scheme: TickerColorScheme
     let baseCurrency: Currency
+    let metricsLayout: HoldingMetricsLayout
     /// hover 时显示 inline 编辑铅笔(放在 name 后面,不挡涨跌)
     let showEditButton: Bool
     let onEdit: () -> Void
@@ -139,77 +230,205 @@ private struct HoldingRow: View {
         return (q.price - holding.costPrice) * holding.quantity
     }
 
-    /// 右侧是否要显示「≈ 本位币」第三行。决定左侧布局是否要 Spacer 撑底。
-    private var hasBaseConversion: Bool {
-        guard holding.currency != baseCurrency else { return false }
-        return position?.basePnL != nil
+    private var nativeTodayPnL: Decimal? {
+        guard let q = quote else { return nil }
+        return (q.price - q.prevClose) * holding.quantity
     }
 
     var body: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(displayCode(holding.symbol))
-                        .font(.system(size: 13, weight: .semibold))
-                    Text(holding.name)
-                        .font(.system(size: 11))
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                    if showEditButton {
-                        Button(action: onEdit) {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundColor(.accentColor)
-                        }
-                        .buttonStyle(.plain)
-                        .help(L("action.edit", comment: ""))
-                        .transition(.opacity)
-                    }
-                }
-                // 右侧 3 行时,在两条左侧文字之间塞 Spacer 把第二行推到底,
-                // 跟右侧的第三行(≈ base)平齐。右侧 2 行时不撑,正常紧贴排。
-                if hasBaseConversion {
-                    Spacer(minLength: 0)
-                }
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                titleLine
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
                 Text(detailText)
                     .font(.system(size: 10))
                     .foregroundColor(.secondary.opacity(0.85))
                     .monospacedDigit()
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                    .layoutPriority(2)
             }
-            .frame(maxHeight: hasBaseConversion ? .infinity : nil, alignment: .top)
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                HStack(spacing: 4) {
-                    if let q = quote {
-                        Text(holding.currency.format(q.price))
-                            .font(.system(size: 12, weight: .semibold))
-                            .monospacedDigit()
-                        pctPill(q.changePct)
-                    } else {
-                        Text("—")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(.secondary)
-                            .monospacedDigit()
-                    }
-                }
-                if let pnl = nativePnL {
-                    Text(signedPnL(pnl, currency: holding.currency))
-                        .font(.system(size: 11))
-                        .foregroundColor(pnlColor(pnl))
-                        .monospacedDigit()
-                }
-                // 本位币换算依赖 FX,只能从 snapshot 拿
-                if holding.currency != baseCurrency,
-                   let pos = position, let basePnL = pos.basePnL {
-                    Text("≈ " + signedPnL(basePnL, currency: baseCurrency))
-                        .font(.system(size: 10))
-                        .foregroundColor(pnlColor(pos.pnl).opacity(0.7))
-                        .monospacedDigit()
-                }
-            }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+
+            metricsGrid
+                .layoutPriority(3)
         }
         .padding(.horizontal, density.rowHorizontalPadding)
         .padding(.vertical, density.rowVerticalPadding)
+    }
+
+    private var metricsGrid: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: metricsLayout.spacing) {
+                allTimeHeader
+                quoteHeader
+                    .frame(width: metricsLayout.trailingColumnWidth, alignment: .trailing)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: metricsLayout.spacing) {
+                metricValue(
+                    value: nativePnL,
+                    currency: holding.currency,
+                    alignment: .leading
+                )
+                metricLine(
+                    label: L("summary.today", comment: ""),
+                    value: nativeTodayPnL,
+                    currency: holding.currency,
+                    alignment: .trailing,
+                    width: metricsLayout.trailingColumnWidth
+                )
+            }
+
+            // 本位币换算依赖 FX,只能从 snapshot 拿。
+            if holding.currency != baseCurrency,
+               let pos = position,
+               pos.basePnL != nil || pos.baseTodayPnL != nil {
+                HStack(alignment: .firstTextBaseline, spacing: metricsLayout.spacing) {
+                    baseMetric(value: pos.basePnL, alignment: .leading)
+                    baseMetric(value: pos.baseTodayPnL, alignment: .trailing, width: metricsLayout.trailingColumnWidth)
+                }
+            }
+        }
+        .monospacedDigit()
+        .lineLimit(1)
+        .frame(width: metricsLayout.totalWidth, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var titleLine: some View {
+        HStack(spacing: 4) {
+            Text(displayCode(holding.symbol))
+                .font(.system(size: 11))
+                .foregroundColor(.secondary)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            Text(holding.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Button(action: onEdit) {
+                Image(systemName: "pencil")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(.accentColor)
+            }
+            .buttonStyle(.plain)
+            .help(L("action.edit", comment: ""))
+            .opacity(showEditButton ? 1 : 0)
+            .disabled(!showEditButton)
+            .frame(width: 10, height: 12)
+            .accessibilityHidden(!showEditButton)
+        }
+    }
+
+    private var allTimeHeader: some View {
+        Text(L("summary.allTime", comment: ""))
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(.secondary.opacity(0.82))
+            .frame(width: metricsLayout.allTimeColumnWidth, alignment: .leading)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    @ViewBuilder
+    private var quoteHeader: some View {
+        HStack(spacing: 5) {
+            if let q = quote {
+                Text(holding.currency.format(q.price))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .monospacedDigit()
+                pctPill(q.changePct)
+            } else {
+                Text("—")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.78)
+    }
+
+    private func baseMetric(
+        value: Decimal?,
+        alignment: Alignment,
+        width: CGFloat? = nil
+    ) -> some View {
+        HStack(spacing: 0) {
+            if let value {
+                Text("≈ " + signedPnL(value, currency: baseCurrency))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(pnlColor(value).opacity(0.7))
+                    .fixedSize(horizontal: true, vertical: false)
+            } else {
+                Text("—")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary.opacity(0.7))
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .frame(width: width ?? metricsLayout.allTimeColumnWidth, alignment: alignment)
+        .monospacedDigit()
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func metricValue(value: Decimal?, currency: Currency, alignment: Alignment) -> some View {
+        HStack(spacing: 0) {
+            if let value {
+                Text(signedPnL(value, currency: currency))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(pnlColor(value))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            } else {
+                Text("—")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .frame(width: metricsLayout.allTimeColumnWidth, alignment: alignment)
+        .monospacedDigit()
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func metricLine(
+        label: String,
+        value: Decimal?,
+        currency: Currency,
+        alignment: Alignment,
+        width: CGFloat? = nil
+    ) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(.secondary.opacity(0.75))
+                .lineLimit(1)
+            if let value {
+                Text(signedPnL(value, currency: currency))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(pnlColor(value))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            } else {
+                Text("—")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+            }
+        }
+        .frame(width: width ?? metricsLayout.allTimeColumnWidth, alignment: alignment)
+        .monospacedDigit()
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func displayCode(_ s: SymbolID) -> String {
@@ -218,7 +437,7 @@ private struct HoldingRow: View {
 
     private var detailText: String {
         let qtyDisplay = "\(holding.quantity)"
-        let costDisplay = holding.currency.format(holding.costPrice)
+        let costDisplay = holding.currency.format(holding.costPrice, fractionDigits: 3)
         return String(format: L("holding.detail", comment: ""), qtyDisplay, costDisplay)
     }
 
