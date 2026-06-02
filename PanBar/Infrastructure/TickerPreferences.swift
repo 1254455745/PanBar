@@ -32,6 +32,15 @@ final class TickerPreferences: ObservableObject {
     @Published var showAllTimePnL: Bool {
         didSet { try? repo.set(SettingsRepository.Keys.tickerShowAllTimePnL, showAllTimePnL ? "1" : "0") }
     }
+    @Published var showAppIcon: Bool {
+        didSet { try? repo.set(SettingsRepository.Keys.tickerShowAppIcon, showAppIcon ? "1" : "0") }
+    }
+    @Published var showQuoteCode: Bool {
+        didSet { try? repo.set(SettingsRepository.Keys.tickerShowQuoteCode, showQuoteCode ? "1" : "0") }
+    }
+    @Published var showQuoteName: Bool {
+        didSet { try? repo.set(SettingsRepository.Keys.tickerShowQuoteName, showQuoteName ? "1" : "0") }
+    }
     /// 哪些大盘指数显示在滚动条中(存 IndexDescriptor.id 集合)。
     @Published var tickerIndexIDs: Set<String> {
         didSet {
@@ -74,23 +83,31 @@ final class TickerPreferences: ObservableObject {
         } else {
             self.tickerIndexIDs = []
         }
-        self.displayMode = TickerDisplayMode(rawValue: repo.string(SettingsRepository.Keys.tickerDisplayMode) ?? "") ?? .scroll
+        let storedDisplayMode = TickerDisplayMode(rawValue: repo.string(SettingsRepository.Keys.tickerDisplayMode) ?? "") ?? .scroll
+        self.displayMode = storedDisplayMode == .scrollNoCode ? .scroll : storedDisplayMode
         self.minimalMetric = MinimalMetric(rawValue: repo.string(SettingsRepository.Keys.tickerMinimalMetric) ?? "") ?? .todayPnL
         self.carouselDwell = Int(repo.string(SettingsRepository.Keys.tickerCarouselDwell) ?? "") ?? 4
+        self.showAppIcon = repo.string(SettingsRepository.Keys.tickerShowAppIcon) != "0"
+        self.showQuoteCode = storedDisplayMode == .scrollNoCode ? false : repo.string(SettingsRepository.Keys.tickerShowQuoteCode) != "0"
+        self.showQuoteName = repo.string(SettingsRepository.Keys.tickerShowQuoteName) != "0"
     }
 }
 
 /// 菜单栏 ticker 的展现形式。
 enum TickerDisplayMode: String, CaseIterable, Identifiable, Codable {
     case scroll    // 经典左右滚动(默认)
+    case scrollNoCode // 旧版本兼容:现在用 showQuoteCode 控制
     case carousel  // 一条一条上下淡入轮播
     case compact   // 三个简写卡片(今日 / 总盈亏 / 总市值)
     case minimal   // 只显示一个用户选定的数字
+
+    static let allCases: [TickerDisplayMode] = [.scroll, .carousel, .compact, .minimal]
 
     var id: String { rawValue }
     var displayName: String {
         switch self {
         case .scroll:   return L("displayMode.scroll", comment: "")
+        case .scrollNoCode: return L("displayMode.scroll", comment: "")
         case .carousel: return L("displayMode.carousel", comment: "")
         case .compact:  return L("displayMode.compact", comment: "")
         case .minimal:  return L("displayMode.minimal", comment: "")

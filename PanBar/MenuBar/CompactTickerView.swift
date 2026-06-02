@@ -13,6 +13,7 @@ final class CompactTickerView: NSView {
     private var slots: Slots = Slots(todayPnL: nil, allTimePnL: nil, totalAssets: nil, baseCurrency: .cny)
     var scheme: TickerColorScheme = .east
     var privacyHidden: Bool = false
+    var showsIcon: Bool = true
     /// hover 状态(放着满足协议,固定模式实际用不到)
     var hovered: Bool = false
     var onContentChanged: (() -> Void)?
@@ -35,7 +36,11 @@ final class CompactTickerView: NSView {
     }
 
     var totalWidth: CGFloat {
-        iconWidth + 6 + max(60, contentWidth) + 4
+        leadingTextX + max(60, contentWidth) + 4
+    }
+
+    private var leadingTextX: CGFloat {
+        showsIcon ? iconWidth + 6 : 2
     }
 
     override var isFlipped: Bool { false }
@@ -64,18 +69,20 @@ final class CompactTickerView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        drawIcon(in: NSRect(x: 2, y: (bounds.height - iconWidth) / 2, width: iconWidth, height: iconWidth))
+        if showsIcon {
+            drawIcon(in: NSRect(x: 2, y: (bounds.height - iconWidth) / 2, width: iconWidth, height: iconWidth))
+        }
 
         if privacyHidden {
             let dots = NSAttributedString(string: "•••", attributes: [
                 .font: valueFont,
                 .foregroundColor: NSColor.secondaryLabelColor
             ])
-            dots.draw(at: NSPoint(x: iconWidth + 8, y: bounds.midY - dots.size().height / 2))
+            dots.draw(at: NSPoint(x: leadingTextX + 4, y: bounds.midY - dots.size().height / 2))
             return
         }
 
-        var x: CGFloat = iconWidth + 6
+        var x: CGFloat = leadingTextX
         for (i, piece) in renderPieces().enumerated() {
             if i > 0 { x += slotSpacing }
             let size = piece.size()
