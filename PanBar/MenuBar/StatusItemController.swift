@@ -19,6 +19,7 @@ final class StatusItemController {
     private var screenSharingMonitor: ScreenSharingMonitor?
     private var privacyHidden: Bool = false
     private var currentMode: TickerDisplayMode = .scroll
+    private var lockedPopoverLength: CGFloat?
 
     init(
         refresher: QuoteRefresher,
@@ -54,6 +55,9 @@ final class StatusItemController {
         }
 
         configure()
+        popoverController.onClose = { [weak self] in
+            self?.unlockPopoverLength()
+        }
         applyPrefs()
         bind()
     }
@@ -171,7 +175,19 @@ final class StatusItemController {
         let image = tickerView.renderImage()
         button.image = image
         button.imagePosition = .imageOnly
-        statusItem.length = tickerView.totalWidth
+        statusItem.length = lockedPopoverLength ?? tickerView.totalWidth
+    }
+
+    private func lockPopoverLength() {
+        guard lockedPopoverLength == nil else { return }
+        lockedPopoverLength = max(40, statusItem.length, tickerView.totalWidth)
+        statusItem.length = lockedPopoverLength ?? tickerView.totalWidth
+    }
+
+    private func unlockPopoverLength() {
+        guard lockedPopoverLength != nil else { return }
+        lockedPopoverLength = nil
+        refreshButtonImage()
     }
 
     /// 各模式根据当前数据自己组装,写回到 statusItem.length。
@@ -209,7 +225,7 @@ final class StatusItemController {
             let snap = refresher.snapshot
             view.update(content: minimalContent(snap: snap, metric: prefs.minimalMetric))
         }
-        statusItem.length = tickerView.totalWidth
+        statusItem.length = lockedPopoverLength ?? tickerView.totalWidth
     }
 
     private func minimalContent(snap: PortfolioSnapshot, metric: MinimalMetric) -> MinimalTickerView.Content? {
@@ -465,6 +481,7 @@ final class StatusItemController {
         if popoverController.isShown {
             popoverController.close()
         } else {
+            lockPopoverLength()
             popoverController.show(relativeTo: button)
         }
     }
@@ -485,6 +502,7 @@ final class StatusItemController {
 
     @objc private func showPopover() {
         guard let button = statusItem.button else { return }
+        lockPopoverLength()
         popoverController.show(relativeTo: button)
     }
 
