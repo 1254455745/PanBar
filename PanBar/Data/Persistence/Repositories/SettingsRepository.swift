@@ -67,6 +67,7 @@ struct SettingsRepository {
         static let tickerScrollAutoWidth = "ticker_scroll_auto_width"
         static let tickerCarouselAutoWidth = "ticker_carousel_auto_width"
         static let tickerCompactAutoWidth = "ticker_compact_auto_width"
+        static let tickerShowDirectionArrow = "ticker_show_direction_arrow"
         static let hideOnScreenShare = "hide_on_screen_share"
         static let privacyManualHide = "privacy_manual_hide"
         static let tickerIndexIDs = "ticker_index_ids"

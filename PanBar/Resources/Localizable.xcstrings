@@ -578,6 +578,12 @@
         "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "菜单栏宽度: %d pt" } }
       }
     },
+    "ticker.showDirectionArrow" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show direction arrow" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示方向箭头" } }
+      }
+    },
     "ticker.summarySection" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Summary metrics" } },
