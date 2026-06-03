@@ -231,7 +231,7 @@ struct PopoverRoot: View {
         if refresher.isOffline {
             return L("footer.offline", comment: "")
         }
-        if let err = refresher.lastError, !err.isEmpty {
+        if hasQuoteError {
             return L("footer.quoteFailed", comment: "")
         }
         // 还没拿到任何 fresh 数据,但有磁盘 seed 进来的旧数据
@@ -255,15 +255,22 @@ struct PopoverRoot: View {
     ///   - 正常:灰色刷新箭头
     private var footerIcon: String {
         if refresher.isOffline { return "wifi.slash" }
-        if refresher.lastError != nil { return "exclamationmark.triangle" }
+        if hasQuoteError { return "exclamationmark.triangle" }
         if refresher.snapshotIsFromCache { return "clock.arrow.circlepath" }
         return "arrow.clockwise"
     }
 
     private var footerIconColor: Color {
-        if refresher.isOffline || refresher.lastError != nil { return .orange }
+        if refresher.isOffline || hasQuoteError { return .orange }
         if refresher.snapshotIsFromCache { return .orange }
         return .secondary
+    }
+
+    private var hasQuoteError: Bool {
+        if let err = refresher.lastError {
+            return !err.isEmpty
+        }
+        return false
     }
 
     private func openSettings() {
