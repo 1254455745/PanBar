@@ -319,7 +319,8 @@ private struct HoldingRow: View {
             .help(L("action.edit", comment: ""))
             .opacity(showEditButton ? 1 : 0)
             .disabled(!showEditButton)
-            .frame(width: 10, height: 12)
+            .frame(width: 16, height: 16)
+            .contentShape(Rectangle())
             .accessibilityHidden(!showEditButton)
         }
     }

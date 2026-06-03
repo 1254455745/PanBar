@@ -85,7 +85,7 @@ final class PopoverController {
     }
 
     func show(relativeTo view: NSView, anchorWidth: CGFloat? = nil) {
-        let width = preferredPopoverWidth()
+        let width = preferredPopoverWidth(screen: view.window?.screen)
         applyContentWidth(width)
         refresher.setPopoverOpen(true)
         refresher.refreshNow()
@@ -106,7 +106,7 @@ final class PopoverController {
         )
     }
 
-    private func preferredPopoverWidth() -> CGFloat {
+    private func preferredPopoverWidth(screen: NSScreen?) -> CGFloat {
         let holdings = (try? holdingsRepo.all()) ?? viewModel.holdings
         guard !holdings.isEmpty else { return minimumPopoverWidth }
 
@@ -118,7 +118,7 @@ final class PopoverController {
             widestRow = max(widestRow, estimatedHoldingRowWidth(holding: holding, quote: quote))
         }
 
-        return min(maximumPopoverWidth(), max(minimumPopoverWidth, ceil(widestRow)))
+        return min(maximumPopoverWidth(screen: screen), max(minimumPopoverWidth, ceil(widestRow)))
     }
 
     private func estimatedHoldingRowWidth(holding: Holding, quote: Quote?) -> CGFloat {
@@ -135,8 +135,8 @@ final class PopoverController {
         return leftWidth + 8 + metricsWidth + rowPadding + 14
     }
 
-    private func maximumPopoverWidth() -> CGFloat {
-        let screenWidth = NSScreen.main?.visibleFrame.width ?? 900
+    private func maximumPopoverWidth(screen: NSScreen?) -> CGFloat {
+        let screenWidth = (screen ?? NSScreen.main)?.visibleFrame.width ?? 900
         return max(minimumPopoverWidth, min(760, screenWidth - 80))
     }
 
@@ -167,7 +167,7 @@ final class PopoverController {
     }
 
     private func baseMetricWidth(value: Decimal?) -> CGFloat {
-        textWidth(value.map { "≈ " + signedPnL($0, currency: container.settingsRepo.baseCurrency) } ?? "—", size: 11, weight: .semibold)
+        textWidth(value.map { "≈ " + signedPnL($0, currency: refresher.snapshot.baseCurrency) } ?? "—", size: 11, weight: .semibold)
     }
 
     private func nativePnL(holding: Holding, quote: Quote?) -> Decimal? {
