@@ -149,11 +149,18 @@ final class TickerPreferences: ObservableObject {
             self.tickerIndexIDs = []
         }
         let storedDisplayMode = TickerDisplayMode(rawValue: repo.string(SettingsRepository.Keys.tickerDisplayMode) ?? "") ?? .scroll
-        self.displayMode = storedDisplayMode == .scrollNoCode ? .scroll : storedDisplayMode
+        let migratesScrollNoCode = storedDisplayMode == .scrollNoCode
+        self.displayMode = migratesScrollNoCode ? .scroll : storedDisplayMode
+        if migratesScrollNoCode {
+            try? repo.set(SettingsRepository.Keys.tickerDisplayMode, TickerDisplayMode.scroll.rawValue)
+        }
         self.minimalMetric = MinimalMetric(rawValue: repo.string(SettingsRepository.Keys.tickerMinimalMetric) ?? "") ?? .todayPnL
         self.carouselDwell = Int(repo.string(SettingsRepository.Keys.tickerCarouselDwell) ?? "") ?? 4
         self.showAppIcon = repo.string(SettingsRepository.Keys.tickerShowAppIcon) != "0"
-        self.showQuoteCode = storedDisplayMode == .scrollNoCode ? false : repo.string(SettingsRepository.Keys.tickerShowQuoteCode) != "0"
+        self.showQuoteCode = migratesScrollNoCode ? false : repo.string(SettingsRepository.Keys.tickerShowQuoteCode) != "0"
+        if migratesScrollNoCode {
+            try? repo.set(SettingsRepository.Keys.tickerShowQuoteCode, "0")
+        }
         self.showQuoteName = repo.string(SettingsRepository.Keys.tickerShowQuoteName) != "0"
         let rawLegacyWidth = Int(repo.string(SettingsRepository.Keys.tickerMenuBarWidth) ?? "") ?? 280
         let legacyWidth = Self.clampMenuBarWidth(rawLegacyWidth)
