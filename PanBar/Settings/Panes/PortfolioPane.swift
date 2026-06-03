@@ -15,9 +15,11 @@ private struct PortfolioColumnWidths {
     init(totalWidth: CGFloat, holdings: [Holding], nameHeader: String) {
         let quantityBase: CGFloat = 48
         let costBase: CGFloat = 76
-        name = ([nameHeader] + holdings.map(\.name))
+        let measuredName = ([nameHeader] + holdings.map(\.name))
             .map(Self.measuredNameWidth)
             .max() ?? Self.measuredNameWidth(nameHeader)
+        let nameCap = max(88, min(180, totalWidth * 0.32))
+        name = min(max(88, measuredName), nameCap)
 
         let fixedWidth = horizontalPadding * 2
             + spacing * 6
@@ -200,7 +202,7 @@ struct PortfolioPane: View {
                 .lineLimit(1)
                 .frame(width: columns.market, alignment: .leading)
                 .foregroundColor(.secondary)
-            Text(NSDecimalNumber(decimal: h.quantity).stringValue)
+            Text(quantityText(h.quantity))
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
@@ -258,6 +260,15 @@ struct PortfolioPane: View {
     private func rowBackground(isSelected: Bool, isAlternate: Bool) -> Color {
         if isSelected { return Color.accentColor.opacity(0.20) }
         return isAlternate ? Color.secondary.opacity(0.05) : Color.clear
+    }
+
+    private func quantityText(_ value: Decimal) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = true
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 6
+        return formatter.string(from: NSDecimalNumber(decimal: value)) ?? NSDecimalNumber(decimal: value).stringValue
     }
 
     /// 把 droppedIDs(UUID string)对应的行移到 ontoIndex 位置,持久化新 sortOrder。
