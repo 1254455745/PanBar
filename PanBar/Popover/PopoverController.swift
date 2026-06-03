@@ -12,9 +12,7 @@ final class PopoverController {
     private let container: DependencyContainer
     private let minimumPopoverWidth: CGFloat = 360
     private let popoverHeight: CGFloat = 520
-    private let metricColumnMinimumWidth: CGFloat = 58
-    private let metricColumnSpacing: CGFloat = 6
-    private let metricsGridWidth: CGFloat = 160
+    private let metricsGridWidth: CGFloat = 104
     /// 监听 popover 之外的点击,关 popover。`.transient` 行为对菜单栏 popover 有时漏
     /// (尤其是点系统菜单栏 / 通知 / 其它 app 时),这里多加一层保险。
     private var eventMonitor: Any?
@@ -141,19 +139,16 @@ final class PopoverController {
     }
 
     private func estimatedMetricsGridWidth(holding: Holding, quote: Quote?, position: HoldingPosition?) -> CGFloat {
-        let allTimeWidth = max(
-            metricColumnMinimumWidth,
-            textWidth(L("summary.allTime", comment: ""), size: 10, weight: .medium),
-            metricValueWidth(value: nativePnL(holding: holding, quote: quote), currency: holding.currency),
-            baseMetricWidth(value: position?.basePnL)
-        )
-        let todayWidth = max(
-            metricColumnMinimumWidth,
+        let metricMode = holdingPopoverMetric
+        return max(
             estimatedQuoteWidth(holding: holding, quote: quote),
-            metricLineWidth(label: L("summary.today", comment: ""), value: nativeTodayPnL(holding: holding, quote: quote), currency: holding.currency),
-            baseMetricWidth(value: position?.baseTodayPnL)
+            metricLineWidth(
+                label: metricMode.displayName,
+                value: nativeMetric(holding: holding, quote: quote, mode: metricMode),
+                currency: holding.currency
+            ),
+            baseMetricWidth(value: baseMetric(position: position, mode: metricMode))
         )
-        return allTimeWidth + metricColumnSpacing + todayWidth
     }
 
     private func metricLineWidth(label: String, value: Decimal?, currency: Currency) -> CGFloat {
@@ -162,12 +157,12 @@ final class PopoverController {
             + textWidth(value.map { signedPnL($0, currency: currency) } ?? "—", size: 11, weight: .semibold)
     }
 
-    private func metricValueWidth(value: Decimal?, currency: Currency) -> CGFloat {
-        textWidth(value.map { signedPnL($0, currency: currency) } ?? "—", size: 11, weight: .semibold)
-    }
-
     private func baseMetricWidth(value: Decimal?) -> CGFloat {
         textWidth(value.map { "≈ " + signedPnL($0, currency: refresher.snapshot.baseCurrency) } ?? "—", size: 11, weight: .semibold)
+    }
+
+    private var holdingPopoverMetric: HoldingPopoverMetric {
+        HoldingPopoverMetric(rawValue: container.settingsRepo.string(SettingsRepository.Keys.holdingPopoverMetric) ?? "") ?? .allTime
     }
 
     private func nativePnL(holding: Holding, quote: Quote?) -> Decimal? {
@@ -178,6 +173,24 @@ final class PopoverController {
     private func nativeTodayPnL(holding: Holding, quote: Quote?) -> Decimal? {
         guard let quote else { return nil }
         return (quote.price - quote.prevClose) * holding.quantity
+    }
+
+    private func nativeMetric(holding: Holding, quote: Quote?, mode: HoldingPopoverMetric) -> Decimal? {
+        switch mode {
+        case .allTime:
+            return nativePnL(holding: holding, quote: quote)
+        case .today:
+            return nativeTodayPnL(holding: holding, quote: quote)
+        }
+    }
+
+    private func baseMetric(position: HoldingPosition?, mode: HoldingPopoverMetric) -> Decimal? {
+        switch mode {
+        case .allTime:
+            return position?.basePnL
+        case .today:
+            return position?.baseTodayPnL
+        }
     }
 
     private func estimatedQuoteWidth(holding: Holding, quote: Quote?) -> CGFloat {

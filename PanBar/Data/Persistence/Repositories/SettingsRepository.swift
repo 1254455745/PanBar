@@ -69,6 +69,7 @@ struct SettingsRepository {
         static let tickerDisplayMode = "ticker_display_mode"
         static let tickerMinimalMetric = "ticker_minimal_metric"
         static let tickerCarouselDwell = "ticker_carousel_dwell"
+        static let holdingPopoverMetric = "holding_popover_metric"
         static let proxyMode = "proxy_mode"            // off / system / manual
         static let proxyHost = "proxy_host"
         static let proxyPort = "proxy_port"
@@ -155,4 +156,18 @@ enum TickerColorScheme: String, Codable, CaseIterable {
     case east   // 涨红 跌绿
     case west   // 涨绿 跌红
     case mono   // 黑白
+}
+
+enum HoldingPopoverMetric: String, CaseIterable, Identifiable, Codable {
+    case allTime = "all_time"
+    case today = "today"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .allTime: return L("summary.allTime", comment: "")
+        case .today: return L("summary.today", comment: "")
+        }
+    }
 }

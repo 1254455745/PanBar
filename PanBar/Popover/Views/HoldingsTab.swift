@@ -14,35 +14,31 @@ struct HoldingsTab: View {
         Dictionary(uniqueKeysWithValues: refresher.snapshot.positions.map { ($0.holding.id, $0) })
     }
 
+    private var holdingPopoverMetric: HoldingPopoverMetric {
+        HoldingPopoverMetric(rawValue: vm.settingsRepo.string(SettingsRepository.Keys.holdingPopoverMetric) ?? "") ?? .allTime
+    }
+
     private var metricsLayout: HoldingMetricsLayout {
-        let spacing: CGFloat = 6
-        var allTimeWidth = textWidth(L("summary.allTime", comment: ""), size: 10, weight: .medium)
+        let metricMode = holdingPopoverMetric
         var trailingWidth: CGFloat = 96
 
         for holding in vm.holdings {
             let quote = refresher.quotes[holding.symbol] ?? positionsByID[holding.id]?.quote
             let position = positionsByID[holding.id]
-            allTimeWidth = max(
-                allTimeWidth,
-                metricValueWidth(value: nativePnL(holding: holding, quote: quote), currency: holding.currency),
-                baseMetricWidth(value: position?.basePnL, currency: refresher.snapshot.baseCurrency)
-            )
             trailingWidth = max(
                 trailingWidth,
                 estimatedQuoteWidth(holding: holding, quote: quote),
                 metricLineWidth(
-                    label: L("summary.today", comment: ""),
-                    value: nativeTodayPnL(holding: holding, quote: quote),
+                    label: metricMode.displayName,
+                    value: nativeMetric(holding: holding, quote: quote, mode: metricMode),
                     currency: holding.currency
                 ),
-                baseMetricWidth(value: position?.baseTodayPnL, currency: refresher.snapshot.baseCurrency)
+                baseMetricWidth(value: baseMetric(position: position, mode: metricMode), currency: refresher.snapshot.baseCurrency)
             )
         }
 
         return HoldingMetricsLayout(
-            allTimeColumnWidth: max(58, ceil(allTimeWidth) + 2),
-            trailingColumnWidth: max(96, ceil(trailingWidth) + 2),
-            spacing: spacing
+            trailingColumnWidth: max(96, ceil(trailingWidth) + 2)
         )
     }
 
@@ -64,6 +60,7 @@ struct HoldingsTab: View {
                                 scheme: prefs.colorScheme,
                                 baseCurrency: refresher.snapshot.baseCurrency,
                                 metricsLayout: metricsLayout,
+                                metricMode: holdingPopoverMetric,
                                 showEditButton: hoveredID == holding.id,
                                 onEdit: { openEdit(holding) }
                             )
@@ -162,6 +159,24 @@ struct HoldingsTab: View {
         return (quote.price - quote.prevClose) * holding.quantity
     }
 
+    private func nativeMetric(holding: Holding, quote: Quote?, mode: HoldingPopoverMetric) -> Decimal? {
+        switch mode {
+        case .allTime:
+            return nativePnL(holding: holding, quote: quote)
+        case .today:
+            return nativeTodayPnL(holding: holding, quote: quote)
+        }
+    }
+
+    private func baseMetric(position: HoldingPosition?, mode: HoldingPopoverMetric) -> Decimal? {
+        switch mode {
+        case .allTime:
+            return position?.basePnL
+        case .today:
+            return position?.baseTodayPnL
+        }
+    }
+
     private func estimatedQuoteWidth(holding: Holding, quote: Quote?) -> CGFloat {
         guard let quote else {
             return textWidth("—", size: 12, weight: .semibold)
@@ -200,12 +215,10 @@ struct HoldingsTab: View {
 }
 
 private struct HoldingMetricsLayout {
-    let allTimeColumnWidth: CGFloat
     let trailingColumnWidth: CGFloat
-    let spacing: CGFloat
 
     var totalWidth: CGFloat {
-        allTimeColumnWidth + spacing + trailingColumnWidth
+        trailingColumnWidth
     }
 }
 
@@ -219,6 +232,7 @@ private struct HoldingRow: View {
     let scheme: TickerColorScheme
     let baseCurrency: Currency
     let metricsLayout: HoldingMetricsLayout
+    let metricMode: HoldingPopoverMetric
     /// hover 时显示 inline 编辑铅笔(放在 name 后面,不挡涨跌)
     let showEditButton: Bool
     let onEdit: () -> Void
@@ -233,6 +247,24 @@ private struct HoldingRow: View {
     private var nativeTodayPnL: Decimal? {
         guard let q = quote else { return nil }
         return (q.price - q.prevClose) * holding.quantity
+    }
+
+    private var selectedMetricValue: Decimal? {
+        switch metricMode {
+        case .allTime:
+            return nativePnL
+        case .today:
+            return nativeTodayPnL
+        }
+    }
+
+    private var selectedBaseMetric: Decimal? {
+        switch metricMode {
+        case .allTime:
+            return position?.basePnL
+        case .today:
+            return position?.baseTodayPnL
+        }
     }
 
     var body: some View {
@@ -260,41 +292,27 @@ private struct HoldingRow: View {
     }
 
     private var metricsGrid: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: metricsLayout.spacing) {
-                allTimeHeader
-                quoteHeader
-                    .frame(width: metricsLayout.trailingColumnWidth, alignment: .trailing)
-            }
+        VStack(alignment: .trailing, spacing: 4) {
+            quoteHeader
+                .frame(width: metricsLayout.trailingColumnWidth, alignment: .trailing)
 
-            HStack(alignment: .firstTextBaseline, spacing: metricsLayout.spacing) {
-                metricValue(
-                    value: nativePnL,
-                    currency: holding.currency,
-                    alignment: .leading
-                )
-                metricLine(
-                    label: L("summary.today", comment: ""),
-                    value: nativeTodayPnL,
-                    currency: holding.currency,
-                    alignment: .trailing,
-                    width: metricsLayout.trailingColumnWidth
-                )
-            }
+            metricLine(
+                label: metricMode.displayName,
+                value: selectedMetricValue,
+                currency: holding.currency,
+                alignment: .trailing,
+                width: metricsLayout.trailingColumnWidth
+            )
 
             // 本位币换算依赖 FX,只能从 snapshot 拿。
             if holding.currency != baseCurrency,
-               let pos = position,
-               pos.basePnL != nil || pos.baseTodayPnL != nil {
-                HStack(alignment: .firstTextBaseline, spacing: metricsLayout.spacing) {
-                    baseMetric(value: pos.basePnL, alignment: .leading)
-                    baseMetric(value: pos.baseTodayPnL, alignment: .trailing, width: metricsLayout.trailingColumnWidth)
-                }
+               selectedBaseMetric != nil {
+                baseMetric(value: selectedBaseMetric, alignment: .trailing, width: metricsLayout.trailingColumnWidth)
             }
         }
         .monospacedDigit()
         .lineLimit(1)
-        .frame(width: metricsLayout.totalWidth, alignment: .leading)
+        .frame(width: metricsLayout.totalWidth, alignment: .trailing)
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -323,15 +341,6 @@ private struct HoldingRow: View {
             .contentShape(Rectangle())
             .accessibilityHidden(!showEditButton)
         }
-    }
-
-    private var allTimeHeader: some View {
-        Text(L("summary.allTime", comment: ""))
-            .font(.system(size: 10, weight: .medium))
-            .foregroundColor(.secondary.opacity(0.82))
-            .frame(width: metricsLayout.allTimeColumnWidth, alignment: .leading)
-            .lineLimit(1)
-            .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder
@@ -372,29 +381,7 @@ private struct HoldingRow: View {
                 .fixedSize(horizontal: true, vertical: false)
             }
         }
-        .frame(width: width ?? metricsLayout.allTimeColumnWidth, alignment: alignment)
-        .monospacedDigit()
-        .lineLimit(1)
-        .fixedSize(horizontal: true, vertical: false)
-    }
-
-    private func metricValue(value: Decimal?, currency: Currency, alignment: Alignment) -> some View {
-        HStack(spacing: 0) {
-            if let value {
-                Text(signedPnL(value, currency: currency))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(pnlColor(value))
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            } else {
-                Text("—")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-        }
-        .frame(width: metricsLayout.allTimeColumnWidth, alignment: alignment)
+        .frame(width: width ?? metricsLayout.trailingColumnWidth, alignment: alignment)
         .monospacedDigit()
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
@@ -426,7 +413,7 @@ private struct HoldingRow: View {
                 .fixedSize(horizontal: true, vertical: false)
             }
         }
-        .frame(width: width ?? metricsLayout.allTimeColumnWidth, alignment: alignment)
+        .frame(width: width ?? metricsLayout.trailingColumnWidth, alignment: alignment)
         .monospacedDigit()
         .lineLimit(1)
         .fixedSize(horizontal: true, vertical: false)
