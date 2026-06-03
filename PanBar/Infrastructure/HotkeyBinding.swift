@@ -85,6 +85,7 @@ struct HotkeyBinding: Codable, Equatable, Sendable {
         guard let layoutData = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let dataRef = unsafeBitCast(layoutData, to: CFData.self)
         guard let layoutPtr = CFDataGetBytePtr(dataRef) else { return nil }
+        guard CFDataGetLength(dataRef) >= MemoryLayout<UCKeyboardLayout>.size else { return nil }
 
         var deadKeyState: UInt32 = 0
         var actualLength = 0
